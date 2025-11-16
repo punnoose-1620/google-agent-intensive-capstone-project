@@ -1,0 +1,10 @@
+openai                  # if you use openai-compatible wrapper; or the official gemini client package
+requests
+pdfplumber
+python-dotenv
+loguru
+fastapi                 # optional for a demo API
+uvicorn                 # optional
+pytest
+tinydb                  # lightweight JSON DB (or sqlite3)
+cachetools

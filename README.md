@@ -29,6 +29,11 @@ educational-tutor-agent/
 Contains Jupyter notebooks for setup, demonstrations, and end-to-end workflows:
 
 - **`00_setup.ipynb`** - Initial setup and environment configuration
+  - Installs project dependencies from `requirements.txt`
+  - Displays current working directory and project root
+  - Visualizes project structure in tree format
+  - Loads environment variables from `.env` file with proper path detection
+  - Validates `GEMINI_API_KEY` is configured
 - **`01_agents_demo.ipynb`** - Demonstration of individual agent capabilities
 - **`02_end_to_end_demo.ipynb`** - Complete end-to-end workflow demonstration
 
@@ -91,9 +96,26 @@ The project follows a modular architecture:
 
 ## Usage Flow
 
-1. **Setup** - Run `00_setup.ipynb` to configure the environment
+1. **Setup** - Run `00_setup.ipynb` to:
+   - Install all required dependencies
+   - Verify project structure and working directory
+   - Load and validate environment variables (`.env` file)
+   - Ensure `GEMINI_API_KEY` is properly configured
 2. **Development** - Use `01_agents_demo.ipynb` to test individual components
 3. **Demonstration** - Run `02_end_to_end_demo.ipynb` for a complete workflow example
+
+## Setup Details
+
+The `00_setup.ipynb` notebook performs the following operations:
+
+1. **Dependency Installation**: Installs all packages listed in `requirements.txt`
+2. **Directory Detection**: Automatically detects the current working directory and project root (handles both running from project root and `notebooks/` subdirectory)
+3. **Project Structure Visualization**: Displays the project directory tree structure up to 3 levels deep
+4. **Environment Configuration**: 
+   - Locates the `.env` file in the project root
+   - Loads environment variables using `python-dotenv`
+   - Handles different file encodings (UTF-8, UTF-16) for cross-platform compatibility
+   - Validates that `GEMINI_API_KEY` is present and configured
 
 ## Dependencies
 
@@ -102,5 +124,18 @@ Install dependencies using:
 pip install -r requirements.txt
 ```
 
-Ensure you have a `.env` file with your `GEMINI_API_KEY` configured for API access.
+Or run the setup notebook which will install them automatically:
+```bash
+jupyter notebook notebooks/00_setup.ipynb
+```
+
+## Environment Configuration
+
+Ensure you have a `.env` file in the project root with your `GEMINI_API_KEY` configured:
+
+```env
+GEMINI_API_KEY=your_api_key_here
+```
+
+**Note**: The setup notebook automatically detects the project root and loads the `.env` file. If you encounter encoding issues (particularly on Windows), the notebook handles UTF-16 encoding automatically. For best compatibility, save your `.env` file as UTF-8 encoding.
 
