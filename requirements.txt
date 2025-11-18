@@ -1,10 +1,27 @@
-openai                  # if you use openai-compatible wrapper; or the official gemini client package
-requests
-pdfplumber
-python-dotenv
-loguru
-fastapi                 # optional for a demo API
-uvicorn                 # optional
-pytest
-tinydb                  # lightweight JSON DB (or sqlite3)
-cachetools
+# Core dependencies
+requests                 # HTTP library for fetching PDFs and web resources
+pdfplumber               # PDF parsing and text extraction
+python-dotenv            # Environment variable management (.env file)
+loguru                   # Advanced logging and observability
+cachetools               # Caching utilities
+
+# LLM API clients
+google-generativeai      # Official Google Gemini API client
+openai                   # Optional: if using OpenAI-compatible wrapper
+
+# Data storage
+tinydb                   # Lightweight JSON database for memory storage
+
+# Web framework (optional - for API deployment)
+fastapi                  # Optional: for demo API endpoint
+uvicorn                  # Optional: ASGI server for FastAPI
+
+# Notebook support (for Jupyter notebooks)
+ipykernel                # IPython kernel for Jupyter notebooks
+jupyter                  # Optional: Jupyter notebook interface
+
+# Testing
+pytest                   # Unit and integration testing framework
+
+# Optional: Web search API (uncomment when implementing web_search)
+# google-search-results   # SerpAPI client for web search functionality
