@@ -6,6 +6,8 @@ Educational Tutor Agent system.
 """
 
 from .tutor_agent import TutorAgent
+from .evaluator_agent import EvaluatorAgent
+from .quiz_agent import QuizAgent
 from .prompts import (
     TUTOR_EXPLAIN_PROMPT,
     QUIZ_GENERATE_PROMPT,
@@ -17,6 +19,8 @@ from .prompts import (
 
 __all__ = [
     'TutorAgent',
+    'EvaluatorAgent',
+    'QuizAgent',
     'TUTOR_EXPLAIN_PROMPT',
     'QUIZ_GENERATE_PROMPT',
     'EVALUATOR_PROMPT',
