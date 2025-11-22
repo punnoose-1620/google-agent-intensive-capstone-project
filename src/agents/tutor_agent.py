@@ -59,10 +59,11 @@ class TutorAgent(Agent):
         self.model_name = model_name
     
     def _call_gemini(
-        self, 
-        prompt: str, 
-        max_tokens: int = 512, 
-        temperature: float = 0.0
+    self, 
+    prompt: str, 
+    max_tokens: int = 512, 
+    temperature: float = 0.0,
+    max_retries: int = 3
     ) -> str:
         """
         Call Gemini API with the given prompt.
@@ -75,37 +76,68 @@ class TutorAgent(Agent):
             max_tokens: Maximum tokens in response (default: 512)
             temperature: Sampling temperature (0.0 = deterministic, 1.0 = creative)
                         Use 0.0 for evaluation, 0.3-0.7 for creative explanations
+            max_retries: Maximum number of retry attempts for transient errors (default: 3)
             
         Returns:
             Response text from Gemini
             
         Raises:
-            Exception: If API call fails
+            Exception: If API call fails after all retries
         """
-        try:
-            # Generate content with specified parameters
-            # Note: Gemini API uses max_output_tokens instead of max_tokens
-            generation_config = genai.types.GenerationConfig(
-                max_output_tokens=max_tokens,
-                temperature=temperature,
-            )
-            
-            response = self.model.generate_content(
-                prompt,
-                generation_config=generation_config
-            )
-            
-            return response.text
-            
-        except Exception as e:
-            raise Exception(f"Gemini API call failed: {str(e)}")
+        import time
+        
+        last_exception = None
+        for attempt in range(max_retries):
+            try:
+                # Generate content with specified parameters
+                # Note: Gemini API uses max_output_tokens instead of max_tokens
+                generation_config = genai.types.GenerationConfig(
+                    max_output_tokens=max_tokens,
+                    temperature=temperature,
+                )
+                
+                response = self.model.generate_content(
+                    prompt,
+                    generation_config=generation_config
+                )
+                
+                return response.text
+                
+            except Exception as e:
+                last_exception = e
+                error_str = str(e)
+                
+                # Check if it's a retryable error (500, 503, rate limit, etc.)
+                is_retryable = (
+                    "500" in error_str or 
+                    "503" in error_str or 
+                    "429" in error_str or
+                    "internal error" in error_str.lower() or
+                    "rate limit" in error_str.lower() or
+                    "quota" in error_str.lower()
+                )
+                
+                if is_retryable and attempt < max_retries - 1:
+                    # Exponential backoff: wait 2^attempt seconds
+                    wait_time = 2 ** attempt
+                    print(f"⚠️  API error (attempt {attempt + 1}/{max_retries}): {error_str[:100]}")
+                    print(f"   Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    # Not retryable or out of retries
+                    raise Exception(f"Gemini API call failed: {error_str}")
     
+        # If we get here, all retries failed
+        raise Exception(f"Gemini API call failed after {max_retries} attempts: {str(last_exception)}")
+
     def _extract_json_from_response(self, response_text: str) -> Dict[str, Any]:
         """
         Extract JSON from LLM response, handling cases where response includes markdown or extra text.
         
         Best Practice: LLMs sometimes wrap JSON in markdown code blocks or add explanatory text.
         This function handles common formats: ```json ... ```, ``` ... ```, or plain JSON.
+        Also handles truncated responses by properly matching complete JSON objects.
         
         Args:
             response_text: Raw response text from LLM
@@ -116,22 +148,77 @@ class TutorAgent(Agent):
         Raises:
             ValueError: If JSON cannot be extracted or parsed
         """
-        # Try to extract JSON from markdown code blocks
+        # Try to extract JSON from markdown code blocks first
         json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_text, re.DOTALL)
         if json_match:
             json_str = json_match.group(1)
         else:
-            # Try to find JSON object in the text
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(0)
-            else:
-                json_str = response_text.strip()
+            # Find the start of JSON object
+            start_idx = response_text.find('{')
+            if start_idx == -1:
+                # No JSON object found
+                raise ValueError(
+                    f"No JSON object found in response. Response preview: {response_text[:200]}"
+                )
+            
+            # Extract complete JSON by counting braces (handles nested objects and arrays)
+            brace_count = 0
+            in_string = False
+            escape_next = False
+            json_str = ""
+            
+            for i in range(start_idx, len(response_text)):
+                char = response_text[i]
+                
+                # Handle escape sequences in strings
+                if escape_next:
+                    json_str += char
+                    escape_next = False
+                    continue
+                
+                if char == '\\':
+                    escape_next = True
+                    json_str += char
+                    continue
+                
+                # Track string boundaries (to ignore braces inside strings)
+                if char == '"' and not escape_next:
+                    in_string = not in_string
+                    json_str += char
+                    continue
+                
+                # Count braces only when not inside a string
+                if not in_string:
+                    if char == '{':
+                        brace_count += 1
+                    elif char == '}':
+                        brace_count -= 1
+                
+                json_str += char
+                
+                # If we've closed all braces, we have a complete JSON object
+                if brace_count == 0:
+                    break
+            
+            # Check if JSON appears to be truncated
+            if brace_count != 0:
+                # JSON is incomplete - this might be a truncated response
+                raise ValueError(
+                    f"JSON response appears to be truncated (unclosed braces: {brace_count}). "
+                    f"This usually means the response exceeded max_tokens. "
+                    f"Response length: {len(response_text)} characters. "
+                    f"Extracted JSON (first 500 chars): {json_str[:500]}"
+                )
         
         try:
             return json.loads(json_str)
         except json.JSONDecodeError as e:
-            raise ValueError(f"Failed to parse JSON from response: {e}\nResponse: {response_text[:200]}")
+            # Provide more context in error message
+            error_msg = f"Failed to parse JSON from response: {e}\n"
+            error_msg += f"Response length: {len(response_text)} characters\n"
+            error_msg += f"Response preview (first 500 chars): {response_text[:500]}\n"
+            error_msg += f"Extracted JSON (first 500 chars): {json_str[:500] if len(json_str) > 500 else json_str}"
+            raise ValueError(error_msg)
     
     def handle_message(self, message: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -239,7 +326,7 @@ Return only valid JSON."""
         
         # Use temperature=0.0 for deterministic, reproducible explanations
         # Best Practice: For educational content, deterministic outputs ensure consistency
-        response_text = self._call_gemini(prompt, max_tokens=1024, temperature=0.0)
+        response_text = self._call_gemini(prompt, max_tokens=2048, temperature=0.0)
         result = self._extract_json_from_response(response_text)
         
         # Ensure all expected keys are present
