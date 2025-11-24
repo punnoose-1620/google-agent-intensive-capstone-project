@@ -5,6 +5,7 @@ This module provides the foundational Agent class and Coordinator for managing
 agent-to-agent communication in the Educational Tutor Agent system.
 """
 
+import json
 import time
 import uuid
 from typing import Dict, Any, Optional, Callable
@@ -174,6 +175,7 @@ class Coordinator:
             # In a real implementation, you might use threading or asyncio for true timeout
             # For simplicity, we'll just track time and raise if it exceeds
             response = target_agent.handle_message(message, context)
+            print('Test response: ', json.dumps(response, indent=2, default=str))
             elapsed_time = time.time() - start_time
             
             if elapsed_time > timeout:

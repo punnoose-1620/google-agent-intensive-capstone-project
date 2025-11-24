@@ -101,7 +101,43 @@ class TutorAgent(Agent):
                     generation_config=generation_config
                 )
                 
-                return response.text
+                # Check if response was truncated
+                if hasattr(response, 'candidates') and response.candidates:
+                    candidate = response.candidates[0]
+                    finish_reason = getattr(candidate, 'finish_reason', None)
+                    
+                    # Check if response was cut off due to token limit
+                    if finish_reason == 'MAX_TOKENS':
+                        # Response was truncated - try to get what we have but warn
+                        response_text = response.text or ""
+                        if not response_text or len(response_text) < 100:
+                            # Try to get text from parts if available
+                            if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+                                response_text = "".join([part.text for part in candidate.content.parts if hasattr(part, 'text')])
+                        
+                        # Raise a specific error about truncation
+                        raise Exception(
+                            f"Response truncated due to max_tokens limit ({max_tokens}). "
+                            f"Response was cut off at {len(response_text)} characters. "
+                            f"Consider increasing max_tokens or simplifying the prompt. "
+                            f"Partial response: {response_text[:200]}..."
+                        )
+                
+                # Get response text
+                response_text = response.text
+                
+                # Check if response_text is None or empty
+                if not response_text:
+                    # Try to extract from candidates if available
+                    if hasattr(response, 'candidates') and response.candidates:
+                        candidate = response.candidates[0]
+                        if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+                            response_text = "".join([part.text for part in candidate.content.parts if hasattr(part, 'text')])
+                    
+                    if not response_text:
+                        raise Exception("Empty response from Gemini API")
+                
+                return response_text
                 
             except Exception as e:
                 last_exception = e
@@ -379,7 +415,7 @@ Return your response as valid JSON only:
 
 Return only valid JSON."""
         
-        response_text = self._call_gemini(prompt, max_tokens=512, temperature=0.0)
+        response_text = self._call_gemini(prompt, max_tokens=2048, temperature=0.0)
         return self._extract_json_from_response(response_text)
     
     def _handle_create_example(self, payload: Dict[str, Any], context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -419,7 +455,7 @@ Return only valid JSON."""
         
         # Use slightly higher temperature for creative examples (0.3)
         # Best Practice: Balance creativity (higher temp) with consistency (lower temp)
-        response_text = self._call_gemini(prompt, max_tokens=512, temperature=0.3)
+        response_text = self._call_gemini(prompt, max_tokens=2048, temperature=0.3)
         return self._extract_json_from_response(response_text)
     
     def _handle_adapt_to_user(self, payload: Dict[str, Any], context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -465,7 +501,7 @@ Return your response as valid JSON only:
 
 Return only valid JSON."""
         
-        response_text = self._call_gemini(prompt, max_tokens=1024, temperature=0.0)
+        response_text = self._call_gemini(prompt, max_tokens=2048, temperature=0.0)
         return self._extract_json_from_response(response_text)
 
 
