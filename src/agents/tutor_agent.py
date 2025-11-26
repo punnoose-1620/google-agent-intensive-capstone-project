@@ -21,6 +21,15 @@ except ImportError:
     GEMINI_AVAILABLE = False
     genai = None
 
+# Try to import loguru for logging
+try:
+    from loguru import logger
+    LOGURU_AVAILABLE = True
+except ImportError:
+    import logging
+    logger = logging.getLogger(__name__)
+    LOGURU_AVAILABLE = False
+
 
 class TutorAgent(Agent):
     """
@@ -61,7 +70,7 @@ class TutorAgent(Agent):
     def _call_gemini(
     self, 
     prompt: str, 
-    max_tokens: int = 512, 
+    max_tokens: int = 8192, 
     temperature: float = 0.0,
     max_retries: int = 3
     ) -> str:
@@ -89,6 +98,8 @@ class TutorAgent(Agent):
         last_exception = None
         for attempt in range(max_retries):
             try:
+                logger.info(f"[{self.name}] Calling Gemini API (attempt {attempt + 1}/{max_retries}) - max_tokens={max_tokens}, temperature={temperature}")
+                
                 # Generate content with specified parameters
                 # Note: Gemini API uses max_output_tokens instead of max_tokens
                 generation_config = genai.types.GenerationConfig(
@@ -101,10 +112,13 @@ class TutorAgent(Agent):
                     generation_config=generation_config
                 )
                 
+                logger.debug(f"[{self.name}] Gemini API response received")
+                
                 # Check if response was truncated
                 if hasattr(response, 'candidates') and response.candidates:
                     candidate = response.candidates[0]
                     finish_reason = getattr(candidate, 'finish_reason', None)
+                    logger.debug(f"[{self.name}] Response finish_reason: {finish_reason}")
                     
                     # Check if response was cut off due to token limit
                     if finish_reason == 'MAX_TOKENS':
@@ -115,6 +129,7 @@ class TutorAgent(Agent):
                             if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
                                 response_text = "".join([part.text for part in candidate.content.parts if hasattr(part, 'text')])
                         
+                        logger.warning(f"[{self.name}] Response truncated at {len(response_text)} characters (max_tokens={max_tokens})")
                         # Raise a specific error about truncation
                         raise Exception(
                             f"Response truncated due to max_tokens limit ({max_tokens}). "
@@ -135,8 +150,10 @@ class TutorAgent(Agent):
                             response_text = "".join([part.text for part in candidate.content.parts if hasattr(part, 'text')])
                     
                     if not response_text:
+                        logger.error(f"[{self.name}] Empty response from Gemini API")
                         raise Exception("Empty response from Gemini API")
                 
+                logger.info(f"[{self.name}] Gemini API response received successfully ({len(response_text)} characters)")
                 return response_text
                 
             except Exception as e:
@@ -156,15 +173,19 @@ class TutorAgent(Agent):
                 if is_retryable and attempt < max_retries - 1:
                     # Exponential backoff: wait 2^attempt seconds
                     wait_time = 2 ** attempt
+                    logger.warning(f"[{self.name}] API error (attempt {attempt + 1}/{max_retries}): {error_str[:100]}")
+                    logger.info(f"[{self.name}] Retrying in {wait_time} seconds...")
                     print(f"⚠️  API error (attempt {attempt + 1}/{max_retries}): {error_str[:100]}")
                     print(f"   Retrying in {wait_time} seconds...")
                     time.sleep(wait_time)
                     continue
                 else:
                     # Not retryable or out of retries
+                    logger.error(f"[{self.name}] Gemini API call failed: {error_str}")
                     raise Exception(f"Gemini API call failed: {error_str}")
     
         # If we get here, all retries failed
+        logger.error(f"[{self.name}] Gemini API call failed after {max_retries} attempts: {str(last_exception)}")
         raise Exception(f"Gemini API call failed after {max_retries} attempts: {str(last_exception)}")
 
     def _extract_json_from_response(self, response_text: str) -> Dict[str, Any]:
@@ -172,8 +193,8 @@ class TutorAgent(Agent):
         Extract JSON from LLM response, handling cases where response includes markdown or extra text.
         
         Best Practice: LLMs sometimes wrap JSON in markdown code blocks or add explanatory text.
-        This function handles common formats: ```json ... ```, ``` ... ```, or plain JSON.
-        Also handles truncated responses by properly matching complete JSON objects.
+        This function handles common formats: ... ```, ``` ... ```, or plain JSON.
+        Uses json.JSONDecoder.raw_decode() for robust parsing that handles all edge cases automatically.
         
         Args:
             response_text: Raw response text from LLM
@@ -184,78 +205,65 @@ class TutorAgent(Agent):
         Raises:
             ValueError: If JSON cannot be extracted or parsed
         """
-        # Try to extract JSON from markdown code blocks first
+        logger.debug(f"[{self.name}] Extracting JSON from response ({len(response_text)} characters)")
+        
+        # Step 1: Try to extract JSON from markdown code blocks first
         json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_text, re.DOTALL)
         if json_match:
             json_str = json_match.group(1)
-        else:
-            # Find the start of JSON object
-            start_idx = response_text.find('{')
-            if start_idx == -1:
-                # No JSON object found
-                raise ValueError(
-                    f"No JSON object found in response. Response preview: {response_text[:200]}"
-                )
-            
-            # Extract complete JSON by counting braces (handles nested objects and arrays)
-            brace_count = 0
-            in_string = False
-            escape_next = False
-            json_str = ""
-            
-            for i in range(start_idx, len(response_text)):
-                char = response_text[i]
-                
-                # Handle escape sequences in strings
-                if escape_next:
-                    json_str += char
-                    escape_next = False
-                    continue
-                
-                if char == '\\':
-                    escape_next = True
-                    json_str += char
-                    continue
-                
-                # Track string boundaries (to ignore braces inside strings)
-                if char == '"' and not escape_next:
-                    in_string = not in_string
-                    json_str += char
-                    continue
-                
-                # Count braces only when not inside a string
-                if not in_string:
-                    if char == '{':
-                        brace_count += 1
-                    elif char == '}':
-                        brace_count -= 1
-                
-                json_str += char
-                
-                # If we've closed all braces, we have a complete JSON object
-                if brace_count == 0:
-                    break
-            
-            # Check if JSON appears to be truncated
-            if brace_count != 0:
-                # JSON is incomplete - this might be a truncated response
-                raise ValueError(
-                    f"JSON response appears to be truncated (unclosed braces: {brace_count}). "
-                    f"This usually means the response exceeded max_tokens. "
-                    f"Response length: {len(response_text)} characters. "
-                    f"Extracted JSON (first 500 chars): {json_str[:500]}"
-                )
+            try:
+                parsed_json = json.loads(json_str)
+                logger.debug(f"[{self.name}] Successfully parsed JSON from markdown code block")
+                return parsed_json
+            except json.JSONDecodeError:
+                # Markdown extraction might have failed due to non-greedy regex
+                # Fall through to raw_decode method
+                pass
         
-        try:
-            return json.loads(json_str)
-        except json.JSONDecodeError as e:
-            # Provide more context in error message
-            error_msg = f"Failed to parse JSON from response: {e}\n"
-            error_msg += f"Response length: {len(response_text)} characters\n"
-            error_msg += f"Response preview (first 500 chars): {response_text[:500]}\n"
-            error_msg += f"Extracted JSON (first 500 chars): {json_str[:500] if len(json_str) > 500 else json_str}"
-            raise ValueError(error_msg)
+        # Step 2: Find the first '{' character and use raw_decode to parse from there
+        # raw_decode automatically handles nested objects, arrays, strings, and all edge cases
+        start_idx = response_text.find('{')
+        if start_idx == -1:
+            # No JSON object found
+            logger.error(f"[{self.name}] No JSON object found in response")
+            raise ValueError(
+                f"No JSON object found in response. Response preview: {response_text[:200]}"
+            )
     
+        # Use JSONDecoder.raw_decode() to parse JSON starting from start_idx
+        # This automatically handles:
+        # - Nested objects and arrays
+        # - Escaped characters in strings
+        # - All JSON edge cases
+        # Returns: (parsed_object, end_index)
+        decoder = json.JSONDecoder()
+        try:
+            parsed_json, end_idx = decoder.raw_decode(response_text, idx=start_idx)
+            logger.debug(f"[{self.name}] Successfully parsed JSON from response (parsed {end_idx - start_idx} characters)")
+            return parsed_json
+        except json.JSONDecodeError as e:
+            # Check if it's a truncation error (incomplete JSON)
+            error_pos = getattr(e, 'pos', None)
+            if error_pos and error_pos >= len(response_text) - 10:
+                # Error near the end - likely truncated
+                logger.error(f"[{self.name}] JSON response appears to be truncated at position {error_pos}")
+                raise ValueError(
+                    f"JSON response appears to be truncated. "
+                    f"Response length: {len(response_text)} characters. "
+                    f"Error at position: {error_pos}. "
+                    f"Response preview (last 500 chars): {response_text[-500:]}"
+                )
+            else:
+                # JSON syntax error
+                logger.error(f"[{self.name}] Failed to parse JSON from response: {e}")
+                error_msg = f"Failed to parse JSON from response: {e}\n"
+                error_msg += f"Response length: {len(response_text)} characters\n"
+                error_msg += f"Error position: {getattr(e, 'pos', 'unknown')}\n"
+                error_msg += f"Response preview (first 500 chars): {response_text[:500]}\n"
+                if start_idx > 0:
+                    error_msg += f"JSON starts at position: {start_idx}\n"
+                raise ValueError(error_msg)## Benefits
+
     def handle_message(self, message: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Handle incoming messages and route to appropriate action handlers.
@@ -277,16 +285,23 @@ class TutorAgent(Agent):
         payload = message.get("payload", {})
         request_id = message.get("request_id", "unknown")
         
+        logger.info(f"[{self.name}] Handling message - action: {action}, request_id: {request_id}")
+        
         try:
             if action == "explain":
+                logger.debug(f"[{self.name}] Processing explain action for topic: {payload.get('topic', 'N/A')}")
                 result = self._handle_explain(payload, context)
             elif action == "summarize_notes":
+                logger.debug(f"[{self.name}] Processing summarize_notes action")
                 result = self._handle_summarize_notes(payload, context)
             elif action == "create_example":
+                logger.debug(f"[{self.name}] Processing create_example action for topic: {payload.get('topic', 'N/A')}")
                 result = self._handle_create_example(payload, context)
             elif action == "adapt_to_user":
+                logger.debug(f"[{self.name}] Processing adapt_to_user action")
                 result = self._handle_adapt_to_user(payload, context)
             else:
+                logger.warning(f"[{self.name}] Unknown action received: {action}")
                 return {
                     "status": "error",
                     "payload": {"error": f"Unknown action: {action}"},
@@ -294,6 +309,7 @@ class TutorAgent(Agent):
                     "meta": {"agent": self.name}
                 }
             
+            logger.info(f"[{self.name}] Successfully processed action: {action}")
             return {
                 "status": "ok",
                 "payload": result,
@@ -302,6 +318,7 @@ class TutorAgent(Agent):
             }
             
         except Exception as e:
+            logger.error(f"[{self.name}] Error processing action {action}: {str(e)}")
             return {
                 "status": "error",
                 "payload": {"error": str(e)},
@@ -323,7 +340,10 @@ class TutorAgent(Agent):
         additional_context = payload.get("additional_context", "")
         
         if not topic:
+            logger.error(f"[{self.name}] Explain action called without topic")
             raise ValueError("Topic is required for explain action")
+        
+        logger.info(f"[{self.name}] Generating explanation for topic: '{topic}' at {level} level")
         
         # Build prompt using structured template
         # Best Practice: Use clear role, instruction, and content structure
@@ -362,8 +382,11 @@ Return only valid JSON."""
         
         # Use temperature=0.0 for deterministic, reproducible explanations
         # Best Practice: For educational content, deterministic outputs ensure consistency
-        response_text = self._call_gemini(prompt, max_tokens=2048, temperature=0.0)
+        logger.debug(f"[{self.name}] Calling Gemini for explanation (max_tokens=8192)")
+        response_text = self._call_gemini(prompt, max_tokens=8192, temperature=0.0)
         result = self._extract_json_from_response(response_text)
+        
+        logger.info(f"[{self.name}] Explanation generated successfully - summary length: {len(result.get('summary', ''))}")
         
         # Ensure all expected keys are present
         return {
@@ -415,7 +438,7 @@ Return your response as valid JSON only:
 
 Return only valid JSON."""
         
-        response_text = self._call_gemini(prompt, max_tokens=2048, temperature=0.0)
+        response_text = self._call_gemini(prompt, max_tokens=8192, temperature=0.0)
         return self._extract_json_from_response(response_text)
     
     def _handle_create_example(self, payload: Dict[str, Any], context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -455,7 +478,7 @@ Return only valid JSON."""
         
         # Use slightly higher temperature for creative examples (0.3)
         # Best Practice: Balance creativity (higher temp) with consistency (lower temp)
-        response_text = self._call_gemini(prompt, max_tokens=2048, temperature=0.3)
+        response_text = self._call_gemini(prompt, max_tokens=8192, temperature=0.3)
         return self._extract_json_from_response(response_text)
     
     def _handle_adapt_to_user(self, payload: Dict[str, Any], context: Optional[Dict[str, Any]]) -> Dict[str, Any]:

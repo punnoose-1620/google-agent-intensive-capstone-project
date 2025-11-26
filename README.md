@@ -139,3 +139,144 @@ GEMINI_API_KEY=your_api_key_here
 
 **Note**: The setup notebook automatically detects the project root and loads the `.env` file. If you encounter encoding issues (particularly on Windows), the notebook handles UTF-16 encoding automatically. For best compatibility, save your `.env` file as UTF-8 encoding.
 
+## Notebook Results and Demonstrations
+
+### `01_agents_demo.ipynb` - Individual Agent Capabilities
+
+This notebook successfully demonstrates the multi-agent system with the following results:
+
+#### ✅ Successful Demonstrations
+
+1. **TutorAgent - Explanation Generation**
+   - Successfully generated structured explanation for "bias-variance tradeoff" at intermediate level
+   - Produced comprehensive content including:
+     - Summary: Clear 2-3 sentence overview
+     - Step-by-step breakdown: 5 detailed steps explaining the concept
+     - Examples: 2 practical examples (Linear Regression vs. Polynomial, Decision Tree Depth)
+     - Key equations: "Total Error = Bias² + Variance + Irreducible Error"
+     - Difficulties: 4 common learning challenges identified
+     - Further reading: 2 educational resources with URLs
+     - Confidence level: "high"
+
+2. **QuizAgent - Quiz Generation**
+   - Successfully generated 5 quiz questions on the topic
+   - Each question includes:
+     - Multiple choice options (A, B, C, D)
+     - Correct answer identification
+     - Detailed explanations
+
+3. **EvaluatorAgent - Quality Assessment**
+   - Successfully evaluated explanation quality using LLM-as-judge methodology
+   - Scores provided:
+     - Accuracy: 4/5
+     - Clarity: 5/5
+     - Completeness: 4/5
+     - Usefulness: 5/5
+     - Overall: 4.5/5
+   - Identified strengths and weaknesses
+   - No hallucinations detected
+
+4. **Memory Storage**
+   - Successfully saved all results (explanation, quiz, evaluation) to persistent memory
+   - Tag-based search functionality working correctly
+   - Session continuity demonstrated
+
+#### Key Features Demonstrated
+- ✅ Multi-agent coordination via Coordinator
+- ✅ Structured message passing between agents
+- ✅ LLM-powered content generation (Gemini API)
+- ✅ Automatic quality assessment
+- ✅ Persistent memory storage with tagging
+
+### `02_end_to_end_demo.ipynb` - Complete Workflow
+
+This notebook demonstrates a full end-to-end workflow on "Bayes theorem" at intermediate level.
+
+#### ⚠️ Known Issue: JSON Parsing Error
+
+**Current Status**: The notebook encounters a JSON parsing error when processing TutorAgent responses.
+
+**Error Details**:
+```
+Failed to parse JSON from response: Expecting ',' delimiter: line 16 column 10 (char 2180)
+Response: {
+    "summary": "Bayes' Theorem is a fundamental concept in probability theory that describes how to update the probability of a hypothesis based on new evidence. It allows us to revise our beliefs i
+```
+
+**Root Cause**:
+- The Gemini API response is being truncated mid-word ("beliefs i" instead of complete text)
+- The response exceeds the `max_tokens` limit (currently set to 8192)
+- The JSON extraction logic attempts to parse incomplete JSON, causing a parsing error
+- Manual brace counting in `_extract_json_from_response()` may not correctly handle all edge cases
+
+**Error Location**:
+- File: `src/agents/tutor_agent.py`
+- Method: `_extract_json_from_response()` (lines 191-284)
+- Issue: Response truncation detection and JSON extraction from incomplete responses
+
+**Attempted Solutions**:
+1. ✅ Increased `max_tokens` from 2048 to 8192 - Issue persists
+2. ✅ Added truncation detection via `finish_reason == 'MAX_TOKENS'` - Not always triggered
+3. ⚠️ Manual brace counting for JSON extraction - May have edge cases
+
+**Recommended Fix**:
+- Replace manual brace counting with Python's built-in `json.JSONDecoder.raw_decode()` method
+- This automatically handles nested objects, arrays, escaped characters, and all JSON edge cases
+- Better detection of truncation by checking if parsing error occurs near the end of response
+- More robust error messages with position information
+
+**Workaround**:
+- Use simpler topics that generate shorter responses
+- Manually increase `max_tokens` further (though 8192 should be sufficient)
+- Simplify the prompt to request shorter explanations
+
+#### Expected Workflow (When Fixed)
+
+The complete workflow should demonstrate:
+
+1. **Step 1: Explanation Generation** - TutorAgent explains "Bayes theorem"
+2. **Step 2: Quiz Generation** - QuizAgent creates assessment questions
+3. **Step 3: Quality Evaluation** - EvaluatorAgent evaluates explanation quality
+4. **Step 4: Memory Storage** - All results saved for future reference
+5. **Step 5: Quiz Grading** - Demonstrate answer grading and adaptive learning
+6. **Step 6: Observability** - View metrics and logs from the session
+
+## Known Issues and Troubleshooting
+
+### JSON Parsing Error with Truncated Responses
+
+**Issue**: TutorAgent responses are sometimes truncated, causing JSON parsing failures.
+
+**Symptoms**:
+- Error: `Failed to parse JSON from response: Expecting ',' delimiter`
+- Response text cuts off mid-word
+- JSON appears incomplete (unclosed braces)
+
+**Current Status**: Under investigation. The issue occurs when:
+- Response length exceeds token limits
+- `finish_reason` check doesn't catch truncation
+- Manual brace counting in JSON extraction has edge cases
+
+**Temporary Workarounds**:
+1. Use simpler topics that generate shorter responses
+2. Increase `max_tokens` parameter (currently 8192)
+3. Simplify prompts to request more concise outputs
+
+**Planned Fix**: Replace manual JSON extraction with `json.JSONDecoder.raw_decode()` for more robust parsing.
+
+### Environment Variable Encoding
+
+**Issue**: `.env` file encoding issues on Windows.
+
+**Solution**: The setup notebook automatically handles UTF-16 encoding. For best results, save `.env` as UTF-8.
+
+## Contributing
+
+When working on this project:
+
+1. Run `00_setup.ipynb` first to ensure environment is configured
+2. Test individual components with `01_agents_demo.ipynb`
+3. Run full workflow with `02_end_to_end_demo.ipynb` (note: currently has JSON parsing issue)
+4. Check logs in `data/logs/` for debugging information
+5. Review observability metrics for agent interactions
+
