@@ -4,6 +4,8 @@
 
 This document explains the file structure of the Educational Tutor Agent project.
 
+![Cover Image](./coverImage1.png)
+
 ## Project Overview
 
 The Educational Tutor Agent is a multi-agent system designed to provide personalized educational tutoring. The project is organized into a modular structure that separates core framework components, specialized agents, tools, and demonstration notebooks.
