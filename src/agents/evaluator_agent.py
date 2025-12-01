@@ -34,14 +34,14 @@ class EvaluatorAgent(Agent):
     Includes fallback heuristics for when API is unavailable.
     """
     
-    def __init__(self, name: str = "evaluator_agent", api_key: Optional[str] = None, model_name: str = "gemini-pro"):
+    def __init__(self, name: str = "evaluator_agent", api_key: Optional[str] = None, model_name: str = "gemini-2.5-flash-lite"):
         """
         Initialize the evaluator agent.
         
         Args:
             name: Agent name identifier
             api_key: Gemini API key (if None, reads from GEMINI_API_KEY env var)
-            model_name: Gemini model to use (default: "gemini-pro")
+            model_name: Gemini model to use (default: "gemini-2.5-flash-lite")
         """
         super().__init__(name=name)
         

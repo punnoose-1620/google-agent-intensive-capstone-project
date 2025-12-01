@@ -38,14 +38,14 @@ class TutorAgent(Agent):
     Uses Google Gemini API to generate educational content with structured outputs.
     """
     
-    def __init__(self, name: str = "tutor_agent", api_key: Optional[str] = None, model_name: str = "gemini-pro"):
+    def __init__(self, name: str = "tutor_agent", api_key: Optional[str] = None, model_name: str = "gemini-2.5-flash-lite"):
         """
         Initialize the tutor agent.
         
         Args:
             name: Agent name identifier
             api_key: Gemini API key (if None, reads from GEMINI_API_KEY env var)
-            model_name: Gemini model to use (default: "gemini-pro")
+            model_name: Gemini model to use (default: "gemini-2.5-flash-lite")
         """
         super().__init__(name=name)
         

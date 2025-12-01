@@ -3,7 +3,7 @@
 > **Capstone Project** for the **AI Agents Intensive Course with Google** offered on Kaggle  
 > **Track**: Agents for Good (Education)
 
-![Cover Image](./coverImage1.png)
+![Cover Image](./Assets/coverImage1.png)
 
 ---
 
@@ -26,6 +26,7 @@
 15. [Future Work](#future-work)
 16. [License](#license)
 17. [Acknowledgements](#acknowledgements)
+19. [URLs](#urls)
 
 ---
 
@@ -838,13 +839,14 @@ This project was inspired by the need for scalable, personalized educational sys
 
 ---
 
-## Contact & Support
+## URLs
 
 For questions, issues, or contributions:
 
-- **GitHub Repository**: [Link to your repository]
-- **Kaggle Submission**: [Link to your Kaggle submission]
-- **Issues**: Use GitHub Issues for bug reports and feature requests
+- [**GitHub Repository**](https://github.com/punnoose-1620)
+- [**PortFolio**](https://punnoose-k-thomas.com/)
+- [**LinkedIn Profile**](https://linkedin.com/punnoose-k-thomas)
+- [**Kaggle Submission**](https://kaggle.com/competitions/agents-intensive-capstone-project/writeups/educational-tutor-agent-multi-agent-ai-tutor-wit)
 
 ---
 

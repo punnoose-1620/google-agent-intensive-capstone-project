@@ -39,7 +39,7 @@ class QuizAgent(Agent):
         self, 
         name: str = "quiz_agent", 
         api_key: Optional[str] = None, 
-        model_name: str = "gemini-pro",
+        model_name: str = "gemini-2.5-flash-lite",
         memory_store: Optional[MemoryStore] = None
     ):
         """
@@ -48,7 +48,7 @@ class QuizAgent(Agent):
         Args:
             name: Agent name identifier
             api_key: Gemini API key (if None, reads from GEMINI_API_KEY env var)
-            model_name: Gemini model to use (default: "gemini-pro")
+            model_name: Gemini model to use (default: "gemini-2.5-flash-lite")
             memory_store: Optional MemoryStore instance for saving wrong answers
         """
         super().__init__(name=name)
