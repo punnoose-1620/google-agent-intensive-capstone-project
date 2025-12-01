@@ -5,12 +5,13 @@ This module provides persistent storage for user progress, preferences,
 and session data using TinyDB (preferred) or atomic JSON file writes (fallback).
 """
 
-import json
 import os
-import tempfile
+import json
 import shutil
-from typing import Any, Dict, List, Optional
+import tempfile
 from pathlib import Path
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 # Try to import TinyDB, fallback to None if not available
 try:
@@ -111,7 +112,6 @@ class MemoryStore:
     
     def _get_timestamp(self) -> str:
         """Get current timestamp as ISO format string."""
-        from datetime import datetime
         return datetime.now().isoformat()
     
     def save(self, key: str, value: Any) -> None:
